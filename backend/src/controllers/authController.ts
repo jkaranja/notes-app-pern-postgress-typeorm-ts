@@ -1,10 +1,10 @@
-import User from "../models/userModel";
 import bcrypt from "bcrypt";
 import jwt, { JwtPayload, VerifyErrors } from "jsonwebtoken";
 import crypto from "crypto";
 import sendEmail from "../utils/sendEmail";
 import { RequestHandler } from "express";
-import mongoose from "mongoose";
+
+import { userRepository } from "../config/data-source";
 
 //HOW IT WILL WORK
 //we send refresh token as cookie that can't be read by js//it will be used to send a new access token if it has expired
@@ -17,13 +17,16 @@ import mongoose from "mongoose";
 /*-----------------------------------------------------------
  * LOGIN
  ------------------------------------------------------------*/
-// @desc Login
-// @route POST /auth
-// @access Public
 interface LoginBody {
   email?: string;
   password?: string;
 }
+
+/**
+ * @desc - Login
+ * @route - POST /auth
+ * @access - Public
+ */
 
 const login: RequestHandler<unknown, unknown, LoginBody, unknown> = async (
   req,
@@ -35,13 +38,17 @@ const login: RequestHandler<unknown, unknown, LoginBody, unknown> = async (
     return res.status(400).json({ message: "All fields are required" });
   }
 
-  const foundUser = await User.findOne({ email }).exec();
+  const foundUser = await userRepository
+    .createQueryBuilder("user")
+    .where("user.email = :email", { email })
+    .addSelect("user.password") //retrieve pass also. hidden with select:false
+    .getOne();
 
   if (!foundUser) {
     return res.status(401).json({ message: "Wrong email or password" });
   }
 
-  if (!foundUser.verified) {
+  if (!foundUser.isVerified) {
     return res.status(401).json({
       message: "Please verify your email first. We sent a link to your email",
     });
@@ -84,17 +91,18 @@ const login: RequestHandler<unknown, unknown, LoginBody, unknown> = async (
 /*-------------------------------------------------------
  * SSO SUCCESSFUL
  --------------------------------------------------------*/
-
-// @desc single sign-on
-// @route POST /auth/sso
-// @access Public
+/**
+ * @desc - single sign-on
+ * @route - POST /auth/sso
+ * @access - Public
+ */
 
 const oauthSuccess: RequestHandler = (req, res) => {
   //only need this when using passport that defines type for req.user as User which empty
   //somehow, this req from passport above is being intercepted by passport and overriding our req.user type declared using module argumentation
   //for other req objects, our User in declare is able to override passport empty User interface
   interface User {
-    _id: mongoose.Types.ObjectId;
+    _id: string;
   }
 
   const { _id: id } = req.user as User;
@@ -126,12 +134,16 @@ const oauthSuccess: RequestHandler = (req, res) => {
  * CONFIRM EMAIL
  ---------------------------------------------------------*/
 
-// @desc verify
-// @route GET /auth/verify/:verifyToken
-// @access Public
 interface VerifyEmailParams {
   verifyToken: string;
 }
+
+/**
+ * @desc - verify
+ * @route - POST /auth/verify/:verifyToken
+ * @access - Public
+ */
+
 const verifyEmail: RequestHandler<
   VerifyEmailParams,
   unknown,
@@ -146,9 +158,10 @@ const verifyEmail: RequestHandler<
     .update(verifyToken)
     .digest("hex");
 
-  const user = await User.findOne({
-    verifyEmailToken,
-  });
+  const user = await userRepository
+    .createQueryBuilder("user")
+    .where("user.verifyEmailToken = :verifyEmailToken", { verifyEmailToken })
+    .getOne();
 
   if (!user) {
     return res.status(400).json({
@@ -156,9 +169,9 @@ const verifyEmail: RequestHandler<
     });
   }
 
-  user.verified = true;
+  user.isVerified = true;
 
-  user.verifyEmailToken = ""; //invalidate token after successful verification
+  user.verifyEmailToken = null; //invalidate token after successful verification
 
   //if changing email
   if (user.newEmail) {
@@ -166,17 +179,19 @@ const verifyEmail: RequestHandler<
     user.newEmail = ""; //clear new email field
   }
 
-  await user.save();
+  await userRepository.save(user);
   return res.status(201).json({ message: "Email verified" });
 };
 
 /*--------------------------------------------------------
  * FORGOT PASSWORD
  ---------------------------------------------------------*/
+/**
+ * @desc - forgot password
+ * @route - POST api/auth/forgot
+ * @access - Public
+ */
 
-// @desc forgot password
-// @route POST api/auth/forgot
-// @access Public
 const forgotPassword: RequestHandler = async (req, res) => {
   const { email } = req.body;
 
@@ -184,7 +199,10 @@ const forgotPassword: RequestHandler = async (req, res) => {
     return res.status(400).json({ message: "Email required" });
   }
 
-  const user = await User.findOne({ email }).exec();
+  const user = await userRepository
+    .createQueryBuilder("user")
+    .where("user.email = :email", { email })
+    .getOne();
 
   if (!user) {
     return res.status(400).json({ message: "Email could not be sent" });
@@ -197,10 +215,12 @@ const forgotPassword: RequestHandler = async (req, res) => {
     .createHash("sha256")
     .update(resetToken)
     .digest("hex");
+  //below won't work
+  // user.resetPasswordToken!.token = resetPasswordToken;
+  // user.resetPasswordToken!.expiresIn = Date.now() + 24 * 60 * 60 * 1000; //expire in 24 hrs
 
-  user.resetPasswordToken.token = resetPasswordToken;
-
-  user.resetPasswordToken.expiresIn = Date.now() + 24 * 60 * 60 * 1000; //expire in 24 hrs
+  user.resetPasswordToken = resetPasswordToken;
+  user.resetPasswordTokenExpiresAt = Date.now() + 24 * 60 * 60 * 1000; //expire in 24 hrs
 
   //send email//then use match.params.resetToken to get the token
   const emailOptions = {
@@ -220,7 +240,7 @@ const forgotPassword: RequestHandler = async (req, res) => {
     return res.status(400).json({ message: "Email could not be sent" });
   }
 
-  await user.save();
+  await userRepository.save(user);
 
   res
     .status(200)
@@ -230,10 +250,12 @@ const forgotPassword: RequestHandler = async (req, res) => {
 /*--------------------------------------------------------
  * RESET PASSWORD
  ---------------------------------------------------------*/
+/**
+ * @desc - Reset
+ * @route - POST /auth/reset/:resetToken
+ * @access - Public
+ */
 
-// @desc Reset
-// @route POST /auth/reset/:resetToken
-// @access Public
 const resetPassword: RequestHandler = async (req, res) => {
   const { password } = req.body;
   const { resetToken } = req.params;
@@ -244,19 +266,30 @@ const resetPassword: RequestHandler = async (req, res) => {
 
   const token = crypto.createHash("sha256").update(resetToken).digest("hex");
 
-  const user = await User.findOne({
-    resetPasswordToken: { token, expiresIn: { $gt: Date.now() } },
-  });
+  const expiresAt = Date.now();
+
+  const user = await userRepository
+    .createQueryBuilder("user")
+    .where("user.resetPasswordToken = :token", {
+      token,
+    })
+    .andWhere("user.resetPasswordTokenExpiresAt > :expiresAt", {
+      expiresAt,
+    })
+
+    .getOne();
 
   if (!user) {
     return res.status(400).json({ message: "Password could not be reset" });
   }
 
-  user.resetPasswordToken = {};
+  user.resetPasswordToken = null;
+  user.resetPasswordTokenExpiresAt = null;
 
   user.password = await bcrypt.hash(password, 10);
 
-  await user.save();
+  await userRepository.save(user);
+
   return res.json({
     message: "Password reset successfully. Please log in",
   });
@@ -266,9 +299,12 @@ const resetPassword: RequestHandler = async (req, res) => {
  * REFRESH TOKEN//GET NEW ACCESS TOKEN
  ---------------------------------------------------------*/
 
-// @desc Refresh
-// @route GET /auth/refresh
-// @access Public - because access token has expired
+/**
+ * @desc - Refresh
+ * @route - GET /auth/refresh
+ * @access - Public
+ */
+
 const refresh: RequestHandler = (req, res) => {
   const cookies = req.cookies;
 
@@ -283,9 +319,10 @@ const refresh: RequestHandler = (req, res) => {
     async (err, decoded) => {
       if (err) return res.status(403).json({ message: "Forbidden" });
 
-      const foundUser = await User.findById(
-        (<{ id: string }>decoded).id
-      ).exec();
+      const foundUser = await userRepository
+        .createQueryBuilder("user")
+        .where("user._id = :id", { id: (<{ id: string }>decoded).id })
+        .getOne();
 
       if (!foundUser) return res.status(401).json({ message: "Unauthorized" });
 
@@ -306,9 +343,12 @@ const refresh: RequestHandler = (req, res) => {
  * LOGOUT//CLEAR REFRESH TOKEN COOKIE
  ---------------------------------------------------------*/
 
-// @desc Logout
-// @route POST api/auth/logout
-// @access Public - just to clear cookie if exists
+/**
+ * @desc - Logout
+ * @route - POST api/auth/logout
+ * @access - Public
+ *
+ */
 const logout: RequestHandler = (req, res) => {
   const cookies = req.cookies;
   if (!cookies?.jwt) {

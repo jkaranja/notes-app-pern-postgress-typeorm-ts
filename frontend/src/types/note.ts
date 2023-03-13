@@ -21,6 +21,7 @@ export interface Note {
 export interface NotesResponse {
   pages: number;
   notes: Note[];
+  total: number;
 }
 
 export interface IDateFilter {

@@ -1,6 +1,6 @@
 import { compareSync } from "bcrypt";
 import passport from "passport";
-import User, { IUser } from "../models/userModel";
+
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 
 import { Strategy as FacebookStrategy } from "passport-facebook";
@@ -10,6 +10,9 @@ import { Strategy as TwitterStrategy } from "@superfaceai/passport-twitter-oauth
 import { Strategy as LinkedInStrategy } from "passport-linkedin-oauth2";
 
 import express from "express";
+import { User } from "../entities/User";
+import { IUser } from "../types/user";
+import { userRepository } from "./data-source";
 
 const app = express();
 
@@ -29,37 +32,50 @@ passport.use(
       callbackURL: `${process.env.BASE_URL}/api/auth/sso/google/callback`,
     },
 
-    (accessToken, refreshToken, profile, cb): void => {
+    async (accessToken, refreshToken, profile, cb): Promise<void> => {
       // console.log(accessToken, profile);
       //if no email, fail & redirect to login again//messages not shown tho
       const email = profile.emails?.[0]?.value;
 
       if (!email) {
-        return cb(
-          new Error(`Failed! Please choose a different way to sign in`)
-        );
+        //to trigger failure redirect, err arg must be null and no user arg supplied
+        //provide only one arg as null to trigger failure
+
+        return cb(null);
+        //below will not trigger failure redirect//it will just return the the error object in empty page
+        //it won't trigger success redirect since user arg is null too
+        // return cb(
+        //   new Error(`Failed! Please choose a different way to sign in`)
+        // );
       }
 
-      User.findOne({ email }, (err: Error, user: IUser) => {
-        if (err) return cb(err);
-
+      //check if user/email already exists
+      try {
+        const user = await userRepository
+          .createQueryBuilder("user")
+          .where("user.email = :email", { email })
+          .getOne();
+        //add user if null
         if (!user) {
-          const newUser = new User({
+          //save using active record approach
+          const newUser = User.create({
             username: profile.displayName,
             email,
-            verified: true,
+            isVerified: true,
           });
 
-          newUser.save();
+          await newUser.save();
 
           return cb(null, newUser);
-        } else if (!user.verified) {
-          //user has account bt not verified//registered using form
-          return cb(err);
+        } else if (!user.isVerified) {
+          //user has account bt not verified//fail/redirect home
+          return cb(null);
         } else {
           return cb(null, user);
         }
-      });
+      } catch (error) {
+        return cb(error as Error);
+      }
     }
   )
 );
@@ -74,37 +90,42 @@ passport.use(
       profileFields: ["id", "displayName", "email"],
       //passReqToCallback: true,
     },
-    (accessToken, refreshToken, profile, cb): void => {
+    async (accessToken, refreshToken, profile, cb): Promise<void> => {
       // console.log(accessToken, profile);
       //if no email, fail & redirect to login again//messages not shown tho
       const email = profile.emails?.[0]?.value;
 
       if (!email) {
-        return cb(
-          new Error(`Failed! Please choose a different way to sign in`)
-        );
+        return cb(null);
       }
 
-      User.findOne({ email }, (err: Error, user: IUser) => {
-        if (err) return cb(err);
-
+      //check if user/email already exists
+      try {
+        const user = await userRepository
+          .createQueryBuilder("user")
+          .where("user.email = :email", { email })
+          .getOne();
+        //add user if null
         if (!user) {
-          const newUser = new User({
+          //save using active record approach
+          const newUser = User.create({
             username: profile.displayName,
             email,
-            verified: true,
+            isVerified: true,
           });
 
-          newUser.save();
+          await newUser.save();
 
           return cb(null, newUser);
-        } else if (!user.verified) {
-          //user has account bt not verified//registered using form
-          return cb(err);
+        } else if (!user.isVerified) {
+          //user has account bt not verified//fail/redirect home
+          return cb(null);
         } else {
           return cb(null, user);
         }
-      });
+      } catch (error) {
+        return cb(error as Error);
+      }
     }
   )
 );
@@ -120,36 +141,42 @@ passport.use(
       //profileFields: ["id", "displayName", "photos", "email"],
       // includeEmail: true,
     },
-    (accessToken, refreshToken, profile, cb): void => {
+    async (accessToken, refreshToken, profile, cb): Promise<void> => {
       // console.log(accessToken, profile);
       //if no email, fail
-      const email = profile?.emails && profile.emails[0]?.value;
+      const email = profile.emails?.[0]?.value;
 
       if (!email) {
-        return cb(
-          new Error(`Failed! Please choose a different way to sign in`)
-        );
+        return cb(null);
       }
-      User.findOne({ email }, (err: Error, user: IUser) => {
-        if (err) return cb(err);
 
+      //check if user/email already exists
+      try {
+        const user = await userRepository
+          .createQueryBuilder("user")
+          .where("user.email = :email", { email })
+          .getOne();
+        //add user if null
         if (!user) {
-          const newUser = new User({
+          //save using active record approach
+          const newUser = User.create({
             username: profile.displayName,
             email,
-            verified: true,
+            isVerified: true,
           });
 
-          newUser.save();
+          await newUser.save();
 
           return cb(null, newUser);
-        } else if (!user.verified) {
-          //user has account bt not verified//registered using form
-          return cb(err);
+        } else if (!user.isVerified) {
+          //user has account bt not verified//fail/redirect home
+          return cb(null);
         } else {
           return cb(null, user);
         }
-      });
+      } catch (error) {
+        return cb(error as Error);
+      }
     }
   )
 );
@@ -167,42 +194,48 @@ passport.use(
       clientSecret: process.env.GITHUB_CLIENT_SECRET,
       callbackURL: `${process.env.BASE_URL}/api/auth/sso/github/callback`,
     },
-    (
+
+    async (
       accessToken: string,
       refreshToken: string,
       profile: StrategyProfile,
       cb: (err: Error | null, user?: IUser) => void
-    ): void => {
+    ): Promise<void> => {
       // console.log(accessToken, profile);
       //if no email, fail & redirect to login again//messages not shown tho
       const email = profile.emails?.[0]?.value;
 
       if (!email) {
-        return cb(
-          new Error(`Failed! Please choose a different way to sign in`)
-        );
+        return cb(null);
       }
 
-      User.findOne({ email }, (err: Error, user: IUser) => {
-        if (err) return cb(err);
-
+      //check if user/email already exists
+      try {
+        const user = await userRepository
+          .createQueryBuilder("user")
+          .where("user.email = :email", { email })
+          .getOne();
+        //add user if null
         if (!user) {
-          const newUser = new User({
+          //save using active record approach
+          const newUser = User.create({
             username: profile.displayName,
             email,
-            verified: true,
+            isVerified: true,
           });
 
-          newUser.save();
+          await newUser.save();
 
           return cb(null, newUser);
-        } else if (!user.verified) {
-          //user has account bt not verified//registered using form
-          return cb(err);
+        } else if (!user.isVerified) {
+          //user has account bt not verified//fail/redirect home
+          return cb(null);
         } else {
           return cb(null, user);
         }
-      });
+      } catch (error) {
+        return cb(error as Error);
+      }
     }
   )
 );
@@ -217,37 +250,42 @@ passport.use(
       scope: ["r_emailaddress", "r_liteprofile"],
       //state: false, //must to not use session
     },
-    (accessToken, refreshToken, profile, cb): void => {
+    async (accessToken, refreshToken, profile, cb): Promise<void> => {
       // console.log(accessToken, profile);
       //if no email, fail & redirect to login again//messages not shown tho
       const email = profile.emails?.[0]?.value;
 
       if (!email) {
-        return cb(
-          new Error(`Failed! Please choose a different way to sign in`)
-        );
+        return cb(null);
       }
 
-      User.findOne({ email }, (err: Error, user: IUser) => {
-        if (err) return cb(err);
-
+      //check if user/email already exists
+      try {
+        const user = await userRepository
+          .createQueryBuilder("user")
+          .where("user.email = :email", { email })
+          .getOne();
+        //add user if null
         if (!user) {
-          const newUser = new User({
+          //save using active record approach
+          const newUser = User.create({
             username: profile.displayName,
             email,
-            verified: true,
+            isVerified: true,
           });
 
-          newUser.save();
+          await newUser.save();
 
           return cb(null, newUser);
-        } else if (!user.verified) {
-          //user has account bt not verified//registered using form
-          return cb(err);
+        } else if (!user.isVerified) {
+          //user has account bt not verified//fail/redirect home
+          return cb(null);
         } else {
           return cb(null, user);
         }
-      });
+      } catch (error) {
+        return cb(error as Error);
+      }
     }
   )
 );

@@ -1,23 +1,27 @@
-import User from "../models/userModel";
-import fs from "fs";
-
 import crypto from "crypto";
-import jwt, { JwtPayload, VerifyErrors } from "jsonwebtoken";
+import jwt from "jsonwebtoken";
 
 import bcrypt from "bcrypt";
 import sendEmail from "../utils/sendEmail";
 import { removeImage } from "../utils/cloudnary";
+import { validate as isValidUUID } from "uuid";
 
 import { Buffer } from "node:buffer";
 import { RequestHandler } from "express";
 import mongoose from "mongoose";
+import { User } from "../entities/User";
+import { userRepository } from "../config/data-source";
 
 /*-----------------------------------------------------------
  * GET USER
  ------------------------------------------------------------*/
-// @desc Get user
-// @route GET /user
-// @access Private
+
+/**
+ * @desc - Get user
+ * @route - GET api/users
+ * @access - Private
+ *
+ */
 const getUser: RequestHandler = async (req, res) => {
   // Get current user details
   const { user } = req;
@@ -42,14 +46,18 @@ const getUser: RequestHandler = async (req, res) => {
  * REGISTER
  ------------------------------------------------------------*/
 
-// @desc  new user
-// @route POST /api/user/register
-// @access Public
 interface SignUpBody {
   username?: string;
   email?: string;
   password?: string;
 }
+
+/**
+ * @desc - Create new user
+ * @route - POST /api/users/register
+ * @access - Public
+ *
+ */
 
 const registerUser: RequestHandler<
   unknown,
@@ -64,14 +72,13 @@ const registerUser: RequestHandler<
     return res.status(400).json({ message: "All fields are required" });
   }
 
-  // Check for duplicate username || email
-  //collation strength 2 makes username or email sent by user case insensitive i.e it should
-  //match both lowercase and uppercase to ensure no same email is added in diff cases
-  const duplicate = await User.findOne({ email })
+  // Check for duplicate email
+  //perform case insensitive validation
 
-    .collation({ locale: "en", strength: 2 })
-    .lean()
-    .exec();
+  const duplicate = await userRepository
+    .createQueryBuilder("user")
+    .where("LOWER(user.email) = :email", { email: email.toLowerCase() })
+    .getOne();
 
   if (duplicate) {
     return res
@@ -104,32 +111,37 @@ const registerUser: RequestHandler<
                              
                 `,
   };
-
+  //don't wait//they can resend if it fails
   const response = sendEmail(emailOptions);
 
-  if (!response) {
-    return res.status(400).json({ message: "Check details and try again" });
-  }
+  // if (!response) {
+  //   return res.status(400).json({ message: "Check details and try again" });
+  // }
 
-  ///save user
-  const userObject = {
-    username,
-    password: hashedPwd,
-    email,
-    verifyEmailToken,
-  };
+  //create and save user
+  const user = new User();
+  user.username = username;
+  user.password = hashedPwd;
+  user.email = email;
+  user.verifyEmailToken = verifyEmailToken;
 
-  const user = new User(userObject); //or use .create(obj)
-  // Create and store new user
-  const created = await user.save();
+  //if using validate class inside entity//call validate before saving//
+  // const errors = await validate(user);
+  // if (errors.length > 0) {
+  //   throw new Error(`Validation failed!`);
+  // } else {
+  //    await userRepository.save(user);
+  // }
 
-  if (!created) {
+  await userRepository.save(user);
+
+  if (!user) {
     return res.status(400).json({ message: "Check details and try again" });
   }
 
   //create a token that will be sent back as cookie//for resending email
   const resendEmailToken = jwt.sign(
-    { id: created._id, email },
+    { id: user._id, email },
     process.env.RESEND_EMAIL_TOKEN_SECRET,
     { expiresIn: "15m" } //expires in 15 min
   );
@@ -148,9 +160,13 @@ const registerUser: RequestHandler<
 /*-----------------------------------------------------------
  * RESEND EMAIL
  ------------------------------------------------------------*/
-// @desc resend email token
-// @route POST /user/resend/token
-// @access Public
+
+/**
+ * @desc - Resend email token
+ * @route - POST api/users/resend/email
+ * @access - Public
+ *
+ */
 const resendVerifyEmail: RequestHandler = async (req, res) => {
   const cookies = req.cookies;
 
@@ -169,9 +185,10 @@ const resendVerifyEmail: RequestHandler = async (req, res) => {
         return res.status(400).json({ message: "Email could not be sent" });
       }
 
-      const foundUser = await User.findById(
-        (<{ id: string }>decoded).id
-      ).exec();
+      const foundUser = await userRepository
+        .createQueryBuilder("user")
+        .where("user._id = :id", { id: (<{ id: string }>decoded).id })
+        .getOne();
 
       if (!foundUser) {
         return res.status(400).json({ message: "Email could not be sent" });
@@ -199,12 +216,11 @@ const resendVerifyEmail: RequestHandler = async (req, res) => {
                              
                 `,
       };
-
+      //don't wait//they can resend if it fails
       const response = sendEmail(emailOptions);
-
-      if (!response) {
-        return res.status(400).json({ message: "Check details and try again" });
-      }
+      // if (!response) {
+      //   return res.status(400).json({ message: "Check details and try again" });
+      // }
 
       //update verify token
       foundUser.verifyEmailToken = verifyEmailToken;
@@ -220,9 +236,13 @@ const resendVerifyEmail: RequestHandler = async (req, res) => {
  ------------------------------------------------------------*/
 //ALLOW USERS TO CHANGE EMAIL BUT DON'T USE EMAIL AS UNIQUE IDENTIFY IN OTHER COLLECTION//USE user: object id //the can populate
 //so you will only need to update email in user collection only//id remains the same
-// @desc Update user
-// @route PATCH api/user/:id
-// @access Private
+
+/**
+ * @desc - Update user
+ * @route - PATCH api/users/:id
+ * @access - Private
+ *
+ */
 const updateUser: RequestHandler = async (req, res) => {
   const { username, email, phoneNumber, password, newPassword } = req.body;
 
@@ -232,13 +252,17 @@ const updateUser: RequestHandler = async (req, res) => {
   const { id } = req.params;
 
   //check if id is a valid ObjectId//ObjectIds is constructed only from 24 hex character strings
-  if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+  if (!isValidUUID(id)) {
     await removeImage(publicId);
     return res.status(400).json({ message: "User not found" });
   }
 
   // Does the user exist to update//exists since we are already here
-  const user = await User.findById(id).exec();
+  const user = await userRepository
+    .createQueryBuilder("user")
+    .addSelect("user.password") //retrieve pass also. hidden with select:false
+    .where("user._id = :id", { id })
+    .getOne();
 
   if (!user) {
     await removeImage(publicId);
@@ -261,7 +285,7 @@ const updateUser: RequestHandler = async (req, res) => {
   if (username) user.username = username;
   if (phoneNumber) user.phoneNumber = phoneNumber;
   //upload and store public id
-  if (profileUrl) user.profileUrl  = profileUrl;
+  if (profileUrl) user.profileUrl = profileUrl;
   //email changed
   if (email && user.email !== email) {
     //gen verify token & hash it
@@ -272,10 +296,10 @@ const updateUser: RequestHandler = async (req, res) => {
       .digest("hex");
 
     // Check for duplicate email//case insensitive
-    const duplicate = await User.findOne({ email })
-      .collation({ locale: "en", strength: 2 })
-      .lean()
-      .exec();
+    const duplicate = await userRepository
+      .createQueryBuilder("user")
+      .where("LOWER(user.email) = :email", { email: email.toLowerCase() })
+      .getOne();
 
     // Allow only updates to the original user
     if (duplicate) {
@@ -301,7 +325,9 @@ const updateUser: RequestHandler = async (req, res) => {
                              
                 `,
     };
-    const response = sendEmail(emailOptions);
+
+    //wait for fail or success//can't resend email
+    const response = await sendEmail(emailOptions);
     if (!response) {
       await removeImage(publicId);
       return res.status(400).json({
@@ -309,10 +335,10 @@ const updateUser: RequestHandler = async (req, res) => {
       });
     }
   }
+  //update user
+  await userRepository.save(user);
 
-  const updatedUser = await user.save();
-
-  if (!updatedUser) {
+  if (!user) {
     await removeImage(publicId);
     return res.status(400).json({
       message: "Account could not be updated. Please try again",
@@ -321,42 +347,53 @@ const updateUser: RequestHandler = async (req, res) => {
 
   //res =  updated user details
   return res.json({
-    id: updatedUser._id,
-    username: updatedUser.username,
-    email: updatedUser.email,
-    profileUrl: updatedUser.profileUrl,
-    phoneNumber: updatedUser.phoneNumber,
-    newEmail: updatedUser.newEmail,
+    id: user._id,
+    username: user.username,
+    email: user.email,
+    profileUrl: user.profileUrl,
+    phoneNumber: user.phoneNumber,
+    newEmail: user.newEmail,
   });
 };
 
-// @desc Delete a user
-// @route DELETE /users
-// @access Private
+/*-----------------------------------------------------------
+ * DELETE USER
+ ------------------------------------------------------------*/
+
+/**
+ * @desc - Delete a user
+ * @route - DELETE api/users/:id
+ * @access - Private
+ *
+ */
 const deleteUser: RequestHandler = async (req, res) => {
   const { id } = req.params;
 
   //check if id is a valid ObjectId//ObjectIds is constructed only from 24 hex character strings
-  // if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+  if (!isValidUUID(id)) {
+    return res.status(400).json({ message: "User not found" });
+  }
+  // if (!mongoose.isValidObjectId(id)) {
   //   return res.status(400).json({ message: "User not found" });
   // }
-   if (!mongoose.isValidObjectId(id)) {
-     return res.status(400).json({ message: "User not found" });
-   }
 
   // Does the user exist to delete?
-  const user = await User.findById(id).exec();
+  const user = await userRepository
+    .createQueryBuilder("user")
+    .where("user._id = :id", { id })
+    .getOne();
 
   if (!user) {
     return res.status(400).json({ message: "User not found" });
   }
 
-  await user.deleteOne();
+  await userRepository.remove(user);
 
   //clear refresh token cookie
   res.clearCookie("jwt", { httpOnly: true, sameSite: "none", secure: true });
-
-  res.status(204).json({ message: "Account deactivated" }); //on frontend, success = clear state and redirect to home
+  //204 don't have a response body
+  //res.status(204).json({ message: "Account deactivated" }); //on frontend, success = clear state and redirect to home
+  res.json({ message: "Account deactivated" }); //on frontend, success = clear state and redirect to home
 };
 
 export { getUser, registerUser, updateUser, deleteUser, resendVerifyEmail };

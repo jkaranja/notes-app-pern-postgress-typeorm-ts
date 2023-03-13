@@ -36,6 +36,7 @@ import Settings from "./features/account/settings/Settings";
 import Wallet from "./features/account/Wallet";
 import Prefetch from "./features/auth/Prefetch";
 import { themeSettings } from "./theme";
+import OauthFailureRedirect from "./pages/OauthFailureRedirect";
 
 function App() {
 
@@ -68,6 +69,10 @@ const theme = themeSettings(prefersDarkMode);
                 <Route path="verify" element={<VerifyEmail />} />
                 <Route path="verifying/:token" element={<VerifyingEmail />} />
                 <Route path="two-factor" element={<TwoFactor />} />
+                <Route
+                  path="oauth/failure"
+                  element={<OauthFailureRedirect />}
+                />
                 <Route path="*" element={<NotFound />} />
               </Route>
 

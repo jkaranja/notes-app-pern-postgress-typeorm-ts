@@ -1,6 +1,8 @@
 import { RequestHandler } from "express";
 import jwt from "jsonwebtoken";
-import User from "../models/userModel";
+import { userRepository } from "../config/data-source";
+
+//import { userRepository } from "../entities/User";
 
 const verifyJWT: RequestHandler = (req, res, next) => {
   const authHeader =
@@ -16,10 +18,10 @@ const verifyJWT: RequestHandler = (req, res, next) => {
   jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, async (err, decoded) => {
     if (err) return res.status(403).json({ message: "Forbidden" });
 
-    const user = await User.findById((<{ id: string }>decoded).id)
-      .select("-password")
-      .lean()
-      .exec();
+    const user = await userRepository
+      .createQueryBuilder("user")
+      .where("user._id = :id", { id: (<{ id: string }>decoded).id })
+      .getOne();
 
     if (!user) {
       return res.status(401).json({

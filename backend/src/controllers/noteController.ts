@@ -1,9 +1,11 @@
-import Note, { INote, INoteFile } from "../models/noteModel";
-import User from "../models/userModel";
 import deleteFiles from "../utils/deleteFiles";
-import fs from "fs";
+import { format } from "date-fns";
 import cleanFiles from "../utils/cleanFiles";
 import { RequestHandler } from "express";
+import { INoteFile } from "../types/note";
+import { endOfDay, startOfDay } from "date-fns";
+import { noteRepository } from "../config/data-source";
+import { Note } from "../entities/Note";
 
 //filter regex
 //https://attacomsian.com/blog/mongoose-like-regex
@@ -11,9 +13,9 @@ import { RequestHandler } from "express";
 //https://dev.to/itz_giddy/how-to-query-documents-in-mongodb-that-fall-within-a-specified-date-range-using-mongoose-and-node-524a
 //https://stackoverflow.com/questions/11973304/mongodb-mongoose-querying-at-a-specific-date
 
-// @desc Get all notes
-// @route GET api/notes
-// @access Private
+/*-----------------------------------------------------------
+ * GET NOTES
+ ------------------------------------------------------------*/
 interface SearchQuery {
   page: string;
   size: string;
@@ -21,13 +23,30 @@ interface SearchQuery {
   fromDate: string;
   search: string;
 }
+
+/**
+ * @desc - Get all notes
+ * @route - GET api/notes
+ * @access - Private
+ *
+ */
+
 const getAllNotes: RequestHandler<
   unknown,
   unknown,
   unknown,
   SearchQuery
 > = async (req, res) => {
-  // Get all notes from MongoDB
+  // Get all notes from postgres db
+
+  //Option1: Find options with:
+  //active record// Note.findOne()
+  //entity manager //dataSource.manager.findOne()
+  //or repo.findOne()
+
+  //Option2: query builder with repo //can be used with with entity manager, data source or repository too
+
+  const { _id: id } = req.user as { _id: string };
 
   /**----------------------------------
          * PAGINATION
@@ -36,65 +55,68 @@ const getAllNotes: RequestHandler<
   //query string payload
   const page = parseInt(req.query.page) || 1; //current page no. / sent as string convert to number//page not sent use 1
   const size = parseInt(req.query.size) || 15; //items per page//if not sent from FE/ use default 15
-  const toDate = req.query.toDate;
-  const fromDate = req.query.fromDate;
-  const search = req.query.search;
-
+  const searchTerm = req.query.search || "%"; // title colum in entity must be of type 'citext' to match regardless of case
   const skip = (page - 1) * size; //eg page = 5, it has already displayed 4 * 10//so skip prev items
+  const { fromDate, toDate } = req.query;
 
-  /**---------------------------
-   * Filter/search& date filter
-   -----------------------------*/
-  //title like %_keyword%  & case insensitive//
-  const searchQuery = {
-    title: { $regex: `.*${search}.*`, $options: "i" },
-  };
-  const sQuery = search ? searchQuery : {};
-  //range range query
-  let dateQuery = {}; //for !fromDate && !toDate//TS will infer dateQuery as Object type for $and
+  //date range
+  //if from fromDate:true, fetch all records not older than fromDate || no lower limit i.e not older than midnight of January 1, 1970
+  const startDate = fromDate
+    ? startOfDay(new Date(fromDate))
+    : new Date(0);
+  const startDateFormatted = startDate.toISOString(); //only iso strings working or format as format("yyyy-MM-dd HH:mm:ss.SSS")//date-fns
+  // if toDate:true, fetch all records older than toDate || no upper limit i.e current date + one day//current date now working
+  const endDate = toDate
+    ? endOfDay(new Date(toDate))
+    : new Date();
 
-  if (fromDate && !toDate)
-    dateQuery = {
-      updatedAt: {
-        $gte: new Date(new Date(fromDate).setHours(0o0, 0o0, 0o0)), //start searching from the very beginning of our start date
-        //$lte: new Date(new Date(toDate).setHours(23, 59, 59)), //up to but not beyond the last minute of our endDate
-      },
-    };
-  if (!fromDate && toDate)
-    dateQuery = {
-      updatedAt: {
-        //$gte: new Date(new Date(fromDate).setHours(00, 00, 00)), //start searching from the very beginning of our start date
-        $lte: new Date(new Date(toDate).setHours(23, 59, 59)), //up to but not beyond the last minute of our endDate
-      },
-    };
-  if (fromDate && toDate)
-    dateQuery = {
-      updatedAt: {
-        $gte: new Date(new Date(fromDate).setHours(0o0, 0o0, 0o0)), //start searching from the very beginning of our start date
-        $lte: new Date(new Date(toDate).setHours(23, 59, 59)), //up to but not beyond the last minute of our endDate
-      },
-    };
+  const endDateFormatted = endDate.toISOString(); //only iso strings working or format as format("yyyy-MM-dd HH:mm:ss.SSS")//date-fns
 
-  /**---------------------------
-   * End of Filter/search& date filter
-   -----------------------------*/
-  const total = await Note.find({ $and: [sQuery, dateQuery] }).count(); //Task.countDocument() ///total docs
+  //format with date-fns or use: new Date(new Date(fromDate).setHours(0o0, 0o0, 0o0)), //start searching from the very beginning of our start date eg //=> Tue Sep 02 2014 00:00:00
+  //new Date(new Date(toDate).setHours(23, 59, 59)), //up to but not beyond the last minute of our endDate /eg Tue Sep 02 2014 23:59:59.999
+  //or use date-fns to add start of day & end of day
+
+  let query = noteRepository
+    .createQueryBuilder("note")
+    //.innerJoin("note.userInfo", "user")
+    //.select(["user.id", "user.name", "photo.url"]) // added selection
+    .where("note.userId = :id ", { id }) //you can also write the whole where here//not clean using AND | OR
+    //If title is false, use %//below will work since title is not nullable
+    .andWhere("note.title LIKE :searchTerm ", {
+      searchTerm: `%${searchTerm}%`,
+    })
+    //if title is nullable i.e it can contain NULL, use below// % won't match NULL
+    // .andWhere("coalesce(note.title, '<NULL>') LIKE :searchTerm ", {
+    //   searchTerm: `%`,
+    // })
+    .andWhere("note.updatedAt >= :startDate", {
+      startDate: startDateFormatted, //date must be a 'Date object' or iso string//i.e string
+    })
+    .andWhere("note.updatedAt < :endDate", {
+      endDate: endDateFormatted, //date must be a string
+    })
+    .orderBy("note.updatedAt", "DESC")
+    //or ASC
+    .maxExecutionTime(8000) // terminate query running for more than 8secs
+    .cache(true);
+  //no duplicate record with same title/case insensitive
+  // .select("DISTINCT ON (LOWER(note.title)) note.title")
+  // .orderBy("LOWER(note.updatedAt)", "DESC")
+
+  const total = await query.getCount();
   //if total = 0 //error
   if (!total) {
     return res.status(400).json({ message: "No notes found" });
   }
+
   const pages = Math.ceil(total / size);
 
-  let query = Note.find({ $and: [sQuery, dateQuery] }).lean();
-
-  query = query.skip(skip).limit(size); //you can use projection,  .find({}, {limit, skip})
-
-  //in case invalid page is sent//out of range//not from the pages sent
+  //in case invalid page is sent//out of range//not from the pages sent by earlier query in res
   if (page > pages) {
     return res.status(400).json({ message: "Page not found" });
   }
 
-  const result = await query;
+  const result = await query.skip(skip).take(size).getMany();
 
   res.status(200).json({
     pages,
@@ -102,14 +124,31 @@ const getAllNotes: RequestHandler<
   });
 };
 
-// @desc Get all notes
-// @route GET api/notes/:id
-// @access Private
+/*-----------------------------------------------------------
+ * GET NOTE
+ ------------------------------------------------------------*/
+
+/**
+ * @desc - Get note
+ * @route - GET api/notes/:id
+ * @access - Private
+ *
+ */
 const getNoteById: RequestHandler = async (req, res) => {
   // Get single note
   const { noteId } = req.params;
 
-  const note = await Note.findOne({ noteId }).exec();
+  //Option1: Find options with:
+  //active record// Note.findOne()
+  //entity manager //dataSource.manager.findOne()
+  //or repo.findOne()
+
+  //Option2: query builder with repo //can be used with with entity manager, data source or repository too
+
+  const note = await noteRepository
+    .createQueryBuilder("note")
+    .where("note.noteId = :id", { id: noteId })
+    .getOne();
 
   // If note not found
   if (!note) {
@@ -125,14 +164,23 @@ const getNoteById: RequestHandler = async (req, res) => {
   });
 };
 
-// @desc Create new note
-// @route POST api/notes
-// @access Private
+/*-----------------------------------------------------------
+ * CREATE NOTE
+ ------------------------------------------------------------*/
+
 interface CreateNoteBody {
   title?: string;
   content?: string;
-  deadline?: Date;
+  deadline?: string;
 }
+
+/**
+ * @desc - Create new note
+ * @route - POST api/notes
+ * @access - Private
+ *
+ */
+
 const createNewNote: RequestHandler<
   unknown,
   unknown,
@@ -152,14 +200,58 @@ const createNewNote: RequestHandler<
     return res.status(400).json({ message: "All fields are required" });
   }
 
-  // Create and store the new user
-  const note = await Note.create({
-    user: user!._id,
-    title,
-    content,
-    deadline,
-    files: fileArr,
-  });
+  /* 
+  //------------>using entity manager-->all repo in one place--> data mapper-->access db within repo
+  const note = dataSource.manager.create(User,{
+    ...
+   })// same as const user = new User(); user.firstName = "Timber"; user.lastName = "Saw";
+   await dataSource.manager.save(note);
+
+  //------------>using repository --> data mapper-->access db within repo
+  const repository = dataSource.getRepository(Note)
+const note = repository.create({
+    ...
+   })// same as const user = new User(); user.firstName = "Timber"; user.lastName = "Saw";
+   await repository.save(note);
+ 
+   //------------>using query builder
+   dataSource
+    .createQueryBuilder()
+    .insert()
+    .into(User)
+    .values([
+        { firstName: "Timber", lastName: "Saw" },
+        { firstName: "Phantom", lastName: "Lancer" },
+    ]) //or just values({}) for one record
+    .execute()
+
+    //------------>using active record ->access db within model
+   const note = Note.create({
+    ...
+   })
+   await note.save();
+
+*/
+  /**Can use new Note() too */
+
+  // Create and store note
+  const note = new Note();
+
+  note.title = title;
+
+  note.content = content;
+
+  note.deadline = deadline;
+
+  note.files = fileArr;
+
+  note.userId = user!._id as string;
+
+  //won't work: "duplicate key value violates unique constraint \
+  //since you're adding the same user object multiple times//just rely on userId above to fetch user
+  // note.userInfo = req.user as any;
+
+  await noteRepository.save(note);
 
   if (!note) {
     deleteFiles(fileArr); //clear failed req
@@ -170,9 +262,10 @@ const createNewNote: RequestHandler<
   return res.status(201).json({ message: "New note created" }); //201 is default
 };
 
-// @desc Update a note
-// @route PATCH /notes/:id
-// @access Private
+/*-----------------------------------------------------------
+ * UPDATE NOTE
+ ------------------------------------------------------------*/
+
 interface UpdateNoteParams {
   noteId: string;
 }
@@ -180,32 +273,37 @@ interface UpdateNoteParams {
 interface UpdateNoteBody {
   title?: string;
   content?: string;
-  deadline?: Date;
+  deadline?: string;
 }
+
+/**
+ * @desc - Update a note
+ * @route - PATCH /notes/:id
+ * @access - Private
+ *
+ */
 const updateNote: RequestHandler<
   UpdateNoteParams,
   unknown,
   UpdateNoteBody,
   unknown
 > = async (req, res) => {
-  const { noteId } = req.params;
+  //params are part of url, so string//convert to number/int(11) in col
+  const noteId = parseInt(req.params.noteId); //NaN or number//NaN is falsy
+
   const { title, content, deadline } = req.body;
 
   const { user, files } = req;
+
+  //noteId must be a number
+  if (!noteId) {
+    return res.status(400).json({ message: "Note not found" });
+  }
 
   //console.log(req.body.removedFiles[0])
 
   //clean files
   const fileArr = cleanFiles(files as INoteFile[]);
-
-  // if (!id.match(/^[0-9a-fA-F]{24}$/)) {
-  //   deleteFiles(fileArr); //clear failed req
-  //   return res.status(400).json({ message: "Note not found" });
-  // }
-  //or use
-  //  if (!mongoose.isValidObjectId(noteId)) {
-  //    return res.status(400).json({ message: "Note not found" });
-  //  }
 
   // Confirm data
   if (!title || !content || !deadline) {
@@ -215,7 +313,10 @@ const updateNote: RequestHandler<
 
   // Confirm note exists to update
   //you can omit type for note//Ts will infer from type passed to model
-  const note: INote | null = await Note.findOne({ noteId }).exec();
+  const note = await noteRepository
+    .createQueryBuilder("note")
+    .where("note.noteId = :id", { id: noteId })
+    .getOne();
 
   if (!note) {
     deleteFiles(fileArr); //clear failed req
@@ -242,14 +343,30 @@ const updateNote: RequestHandler<
   });
 };
 
-// @desc Delete a note
-// @route DELETE /notes/:id
-// @access Private
+/*-----------------------------------------------------------
+ * DELETE NOTE
+ ------------------------------------------------------------*/
+
+/**
+ * @desc - Delete a note
+ * @route - DELETE /notes/:id
+ * @access - Private
+ *
+ */
 const deleteNote: RequestHandler = async (req, res) => {
-  const { noteId } = req.params;
+  //params are part of url, so string//convert to number/int(11) in col
+  const noteId = parseInt(req.params.noteId); //NaN or number//NaN is falsy
+
+  //noteId must be a number
+  if (!noteId) {
+    return res.status(400).json({ message: "Note not found" });
+  }
 
   // Confirm note exists to delete
-  const note = await Note.findOne({ noteId }).exec();
+  const note = await noteRepository
+    .createQueryBuilder("note")
+    .where("note.noteId = :id", { id: noteId })
+    .getOne();
 
   if (!note) {
     return res.status(400).json({ message: "Note not found" });
@@ -257,7 +374,7 @@ const deleteNote: RequestHandler = async (req, res) => {
 
   deleteFiles(note.files); //del files for note
 
-  const result = await note.deleteOne();
+  const result = await noteRepository.remove(note);
 
   res.json({ message: `Note deleted` });
 };

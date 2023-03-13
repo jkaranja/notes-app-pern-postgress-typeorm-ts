@@ -1,4 +1,4 @@
-//https://dev.to/franciscomendes10866/image-upload-to-cloudinary-with-node-js-523o
+//use this**//https://dev.to/franciscomendes10866/image-upload-to-cloudinary-with-node-js-523o
 //https://medium.com/@joeeasy_/uploading-images-to-cloudinary-using-multer-and-expressjs-f0b9a4e14c54
 //https://blog.bitsrc.io/api-upload-file-to-cloudinary-with-node-js-a16da3e747f7
 
@@ -21,14 +21,15 @@ cloudinary.config({
 
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
-  params: {
-    folder: "AUTH", //add  folder: string; under type with public_id?//in index.d.ts//multer-storage-cloudinary //lib
-    public_id: (req, file) => {
+  
+  params: {    
+    folder: "AUTH", //or add  folder: string; under type with public_id?//in index.d.ts//multer-storage-cloudinary //lib
+    public_id: (req: any, file: any) => {
       const filenameArr = file?.originalname?.split(".");
       filenameArr.pop();
       return new Date().toISOString().replace(/[:.]/g, "-") + "-" + filenameArr;
     },
-  },
+  } as any,
 });
 
 const upload = multer({ storage });

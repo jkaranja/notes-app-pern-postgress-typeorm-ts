@@ -6,6 +6,7 @@
   "scripts": {
     "start": "nodemon src/server.ts",
     "build": "tsc -p .",
+    "typeorm": "typeorm-ts-node-esm",
     "lint": "eslint . --ext .ts",
     "eslint:fix": "eslint --fix",
     "client": "npm run dev --prefix ../frontend",
@@ -43,6 +44,7 @@
     "@superfaceai/passport-twitter-oauth2": "^1.2.3",
     "adm-zip": "^0.5.10",
     "bcrypt": "^5.1.0",
+    "class-validator": "^0.14.0",
     "cloudinary": "^1.33.0",
     "concurrently": "^7.6.0",
     "cookie-parser": "^1.4.6",
@@ -64,6 +66,9 @@
     "passport-github2": "^0.1.12",
     "passport-google-oauth20": "^2.0.0",
     "passport-linkedin-oauth2": "^2.0.0",
+    "pg": "^8.10.0",
+    "reflect-metadata": "^0.1.13",
+    "typeorm": "^0.3.12",
     "uuid": "^9.0.0"
   }
 }

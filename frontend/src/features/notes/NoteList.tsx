@@ -55,7 +55,7 @@ import useDebounce from "../../hooks/useDebounce";
 
 import showToast from "../../common/showToast";
 import Grid2 from "@mui/material/Unstable_Grid2/Grid2";
-import {  useGetNotesQuery } from "./notesApiSlice";
+import { useGetNotesQuery } from "./notesApiSlice";
 import { IDateFilter, Note } from "../../types/note";
 
 const NoteList = () => {
@@ -66,13 +66,15 @@ const NoteList = () => {
 
   const [noteList, setNoteList] = useState<Note[]>([]);
 
+  const [total, setTotal] = useState(0)//total docs found
+
   //filter
   //note: set dates as '', dates are sent as GET query string so undefined or null will be sent as string = true
   const [fromDate, setFromDate] = useState<string | Date>("");
   const [toDate, setToDate] = useState<string | Date>("");
   const [searchTerm, setSearchTerm] = useState(searchParams.get("q") || "");
   const [filterError, setFilterError] = useState(false);
-  
+
   const debouncedSearchTerm = useDebounce(searchTerm, 1000);
   const [dateFilter, setDateFilter] = useState<IDateFilter>({});
 
@@ -82,7 +84,9 @@ const NoteList = () => {
    PAGINATION
    ----------------------------------------*/
   //const currentPage = searchParams.get("page") || 1; //for mui render//changes on url change
-  const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get("page") as string) || 1); //for custom pag..
+  const [currentPage, setCurrentPage] = useState(
+    parseInt(searchParams.get("page") as string) || 1
+  ); //for custom pag..
   const [totalPages, setTotalPages] = useState(0);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
@@ -126,6 +130,7 @@ const NoteList = () => {
   //store notes in a state to manipulate notes
   useEffect(() => {
     setNoteList(data?.notes || []);
+    setTotal(data?.total || 0)
   }, [data]);
 
   /* ----------------------------------------
@@ -178,8 +183,9 @@ const NoteList = () => {
   const handleClearFilter = () => {
     setFromDate("");
     setToDate("");
-    setFilterError(false); 
-  }
+    setDateFilter({ fromDate: "", toDate: "" }); //runs useQuery again
+    setFilterError(false);
+  };
   /* ----------------------------------------
    HANDLE CHECKED
    ----------------------------------------*/
@@ -202,7 +208,7 @@ const NoteList = () => {
     setNoteList(newData);
     setBulkCheck(!bulkCheck);
   };
-  console.log(error);
+
   //feedback
   useEffect(() => {
     showToast({
@@ -326,18 +332,23 @@ const NoteList = () => {
         >
           <Grid2 flexGrow={1}>
             <Typography px={1} pt={1} variant="body2">
+              <span style={{paddingRight: 3}}>{total} records</span>
               {isFetching ? (
                 <CircularProgress sx={{ color: "grey.dark" }} size={20} />
               ) : (
-                `${searchTerm && `Results matching term= '${searchTerm}',`} 
-                ${(fromDate || toDate) && `Filter`}
+                `${searchTerm && `matching term= '${searchTerm}',`} 
+                
                 ${
                   fromDate &&
-                  `from date = ${(fromDate as Date)?.toLocaleDateString?.("en-GB")},`
+                  `not older than = ${(fromDate as Date)?.toLocaleDateString?.(
+                    "en-GB"
+                  )},`
                 }
                  ${
                    toDate &&
-                   `up to date = ${(toDate as Date)?.toLocaleDateString?.("en-GB")},`
+                   `older than = ${(toDate as Date)?.toLocaleDateString?.(
+                     "en-GB"
+                   )},`
                  }                
                 
                 `
@@ -377,7 +388,7 @@ const NoteList = () => {
                 >
                   <Checkbox checked={bulkCheck} onChange={handleBulkCheck} />
                   <Typography component="span" variant="subtitle1">
-                    Order Id
+                    Note Id
                   </Typography>
                 </Box>
               </TableCell>

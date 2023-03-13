@@ -114,3 +114,8 @@ router.route("/reset/:resetToken").post(authController.resetPassword);
 router.route("/logout").post(authController.logout);
 
 export default router;
+
+//or you can do export { router as authRoutes } 
+//so you can type authRoutes and hit ctl + space to import auto
+//instead of using default exports then having to name the import as authRoutes
+//tip you can import as router first auto. then rename router>authRoutes//don't have to type path

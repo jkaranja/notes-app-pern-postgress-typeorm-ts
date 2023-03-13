@@ -9,9 +9,9 @@ declare global {
       ACCESS_TOKEN_SECRET: string;
       REFRESH_TOKEN_SECRET: string;
       RESEND_EMAIL_TOKEN_SECRET: string;
-      EMAIL_USERNAME: string;
-      EMAIL_PASS: string;
-      EMAIL_HOST: string;
+      SMTP_USER: string;
+      SMTP_PASS: string;
+      SMTP_HOST: string;
 
       BASE_URL: string;
 

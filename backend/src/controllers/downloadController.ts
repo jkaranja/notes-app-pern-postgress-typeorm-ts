@@ -9,9 +9,12 @@ import fs from "fs";
 import AdmZip from "adm-zip";
 import { RequestHandler } from "express";
 
-// @desc Get all notes
-// @route GET api/download/:id
-// @access Private
+/**
+ * @desc - Get all notes
+ * @route - GET api/download/single
+ * @access - Private
+ *
+ */
 
 const singleDownload: RequestHandler = (req, res) => {
   const { filePath } = req.body;
@@ -30,9 +33,12 @@ const singleDownload: RequestHandler = (req, res) => {
   });
 };
 
-// @desc Get all notes
-// @route GET api/notes/:id
-// @access Private
+/**
+ * @desc - Get all notes
+ * @route - GET api/download/zip
+ * @access - Private
+ *
+ */
 
 //multiple/zip or compress using adm-zip library
 const zipDownload: RequestHandler = (req, res) => {
@@ -102,7 +108,4 @@ const zipDownload: RequestHandler = (req, res) => {
   // res.header("Access-Control-Allow-Origin", "*");
 };
 
-export {
-  singleDownload,
-  zipDownload,
-};
+export { singleDownload, zipDownload };

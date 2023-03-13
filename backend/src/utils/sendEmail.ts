@@ -15,16 +15,25 @@ interface IOptions {
   html: string;
 }
 
+//smtp protocol sends email to mailbox
+//pop3 retrieves mail from from mail server
+
+/**
+ *
+ * @param -mail options
+ * @returns -null | {status: "sent"}
+ */
+
 const sendEmail = async ({ from, subject, to, replyTo, body }: MailParams) => {
   // create reusable transporter object using the default SMTP transport
   const transporter = nodemailer.createTransport({
-    name: process.env.EMAIL_HOST,
-    host: process.env.EMAIL_HOST,
+    name: process.env.SMTP_HOST,
+    host: process.env.SMTP_HOST,
     port: 465,
     secure: true, //use tls
     auth: {
-      user: from || process.env.EMAIL_USERNAME, //Email/ noreply or other,//must match with from in mail options else= sent to spam
-      pass: process.env.EMAIL_PASS,
+      user: from || process.env.SMTP_USER, //Email/ noreply or other,//must match with from in mail options else= sent to spam
+      pass: process.env.SMTP_PASS,
     },
     tls: {
       rejectUnauthorized: false,
@@ -79,7 +88,7 @@ const sendEmail = async ({ from, subject, to, replyTo, body }: MailParams) => {
 `;
 
   const mailOptions = {
-    from: `"MUI" <${from || process.env.EMAIL_USERNAME}>`, // sender address
+    from: `"MUI" <${from || process.env.SMTP_USER}>`, // sender address
     to: !Array.isArray(to) && to, // comma separated string if many/or array for multiple users//all emails visible to each
     bcc: Array.isArray(to) && to, //comma separated string/ array/ to many//can't see others' emails
     subject: subject, // Subject line
