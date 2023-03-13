@@ -1,5 +1,4 @@
 import { Backdrop, CircularProgress } from "@mui/material";
-import is from "date-fns/esm/locale/is/index.js";
 
 import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";

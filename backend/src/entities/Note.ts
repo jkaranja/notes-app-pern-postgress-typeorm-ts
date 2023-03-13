@@ -47,6 +47,11 @@ export class Note extends Base {
   @Column() //makes field optional = null//default is false = required
   userId: string;
 
+
+   //for texting migrations
+  // @Column({ nullable: true }) //makes field optional = null//default is false = required
+  // phonex: string;
+
   //one2one: unidirectional//store user//from req.user
   //won't work: "duplicate key value violates unique constraint \
   //since you're adding the same user object multiple times//just rely on userId above to fetch user

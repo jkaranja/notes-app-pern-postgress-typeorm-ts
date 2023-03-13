@@ -61,16 +61,13 @@ const getAllNotes: RequestHandler<
 
   //date range
   //if from fromDate:true, fetch all records not older than fromDate || no lower limit i.e not older than midnight of January 1, 1970
-  const startDate = fromDate
-    ? startOfDay(new Date(fromDate))
-    : new Date(0);
-  const startDateFormatted = startDate.toISOString(); //only iso strings working or format as format("yyyy-MM-dd HH:mm:ss.SSS")//date-fns
-  // if toDate:true, fetch all records older than toDate || no upper limit i.e current date + one day//current date now working
-  const endDate = toDate
-    ? endOfDay(new Date(toDate))
-    : new Date();
-
-  const endDateFormatted = endDate.toISOString(); //only iso strings working or format as format("yyyy-MM-dd HH:mm:ss.SSS")//date-fns
+  const startDate = fromDate ? new Date(fromDate) : new Date(0);
+  //from midnight of that day//include all records added from eg Tue Sep 02 2014 00:00:00
+  const startDateFormatted = startOfDay(startDate).toISOString(); //only iso strings working or format as format("yyyy-MM-dd HH:mm:ss.SSS")//date-fns
+  // if toDate:true, fetch all records older than toDate || no upper limit i.e current date
+  const endDate = toDate ? new Date(toDate) : new Date();
+  //end of day//up to midnight of that day
+  const endDateFormatted = endOfDay(endDate).toISOString(); //only iso strings working or format as format("yyyy-MM-dd HH:mm:ss.SSS")//date-fns
 
   //format with date-fns or use: new Date(new Date(fromDate).setHours(0o0, 0o0, 0o0)), //start searching from the very beginning of our start date eg //=> Tue Sep 02 2014 00:00:00
   //new Date(new Date(toDate).setHours(23, 59, 59)), //up to but not beyond the last minute of our endDate /eg Tue Sep 02 2014 23:59:59.999
@@ -92,7 +89,7 @@ const getAllNotes: RequestHandler<
     .andWhere("note.updatedAt >= :startDate", {
       startDate: startDateFormatted, //date must be a 'Date object' or iso string//i.e string
     })
-    .andWhere("note.updatedAt < :endDate", {
+    .andWhere("note.updatedAt <= :endDate", {
       endDate: endDateFormatted, //date must be a string
     })
     .orderBy("note.updatedAt", "DESC")
@@ -120,6 +117,7 @@ const getAllNotes: RequestHandler<
 
   res.status(200).json({
     pages,
+    total,
     notes: result,
   });
 };

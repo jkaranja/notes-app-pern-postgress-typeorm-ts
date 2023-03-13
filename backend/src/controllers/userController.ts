@@ -10,7 +10,8 @@ import { Buffer } from "node:buffer";
 import { RequestHandler } from "express";
 import mongoose from "mongoose";
 import { User } from "../entities/User";
-import { userRepository } from "../config/data-source";
+import { AppDataSource, userRepository } from "../config/data-source";
+import { Profile } from "../entities/Profile";
 
 /*-----------------------------------------------------------
  * GET USER
@@ -25,12 +26,59 @@ import { userRepository } from "../config/data-source";
 const getUser: RequestHandler = async (req, res) => {
   // Get current user details
   const { user } = req;
-  // If no users
+  // If no user
   if (!user) {
     return res
       .status(400)
       .json({ message: "Something isn't right. Please contact support" });
   }
+
+  /**-----------------------------------------------------------------------------
+   * RELATIONS//MANY2MANY IS UNDER ENTITY(NOT TESTED)//OTHERS/BELOW  IMPLEMENTED & WORKING
+   ----------*/
+   /**
+  //get one2one relation//unidirectional//get profile from user side
+  const users = await AppDataSource.getRepository(User)
+    .createQueryBuilder("user")
+    .andWhere("user.updatedAt >= :startDate", {
+      startDate: "2023-03-13T00:51:38.383Z", //date must be a 'Date object' or iso string//i.e string
+    })
+    .leftJoinAndSelect("user.profile", "profile")
+    .getMany();
+  // res.json(users);
+  // result{...user,  "profile": {"id": 1,"gender": "male", "photo": "me.jpg"}}
+
+  //one2one bidirectional // you can get user from profile
+  const profiles = await AppDataSource.getRepository(Profile)
+    .createQueryBuilder("profile")
+    .leftJoinAndSelect("profile.user", "user")
+    .getMany();
+  //res.json(profiles);
+  //result{...profile, "user": {..user doc} "
+
+  //one2many/many2one//
+  //one2many side// you can get profiles from user side//the inverse side//non owning
+  const currentUsers = await AppDataSource.getRepository(User)
+    .createQueryBuilder("user")
+    .andWhere("user.updatedAt >= :startDate", {
+      startDate: "2023-03-13T00:51:38.383Z", //date must be a 'Date object' or iso string//i.e string
+    })
+    .leftJoinAndSelect("user.profiles", "profiles")
+    .getMany();
+  // res.json(currentUsers);
+  //result{...user doc, "profiles": [{profile doc1}, {profile doc2}] "
+
+  //many2one//owning side//get user from one of the profiles
+  const xprofiles = await AppDataSource.getRepository(Profile)
+    .createQueryBuilder("profile")
+    .leftJoinAndSelect("profile.currentUser", "user")
+    .getMany();
+  //res.json(xprofiles);
+  //result{...profile doc, "currentUser": {...user doc}
+  */
+  //---------------------------end of relations-----------------
+
+
 
   res.json({
     id: user._id,
@@ -132,6 +180,36 @@ const registerUser: RequestHandler<
   // } else {
   //    await userRepository.save(user);
   // }
+
+  /**-----------------------------------------------------------------------------
+   * SAVING RELATIONS//MANY2MANY IS UNDER ENTITY(NOT TESTED)//OTHERS/BELOW  IMPLEMENTED & WORKING
+   ----------*/
+  //1.---------------saving a OneToOne relation//for both uni/bidirectional relations-----------
+  /**
+  const profile = new Profile();
+  profile.gender = "male";
+  profile.photo = "me.jpg";
+  // first we should save a profile
+  await AppDataSource.manager.save(profile);
+
+  user.profile = profile; //// this way we connect them//profile will be added to use -->profile field as foreign key
+  //then save user with relation
+  await userRepository.save(user);
+  
+
+  //2----------saving a Many-to-one / one-to-many relations relation---------------
+  const profile1 = new Profile();
+  profile1.gender = "male";
+  profile1.photo = "me-and-bears.jpg";
+  //await AppDataSource.manager.save(profile1);
+
+  const profile2 = new Profile();
+  profile2.gender = "male";
+  profile2.photo = "me.jpg";
+  //await AppDataSource.manager.save(profile2);
+  user.profiles = [profile1, profile2];
+  */
+  //---------------------------end of relations-----------------
 
   await userRepository.save(user);
 

@@ -6,7 +6,11 @@
   "scripts": {
     "start": "nodemon src/server.ts",
     "build": "tsc -p .",
-    "typeorm": "typeorm-ts-node-esm",
+    "typeorm": "typeorm-ts-node-esm -d ./src/config/data-source//then you can do: npm run typeorm migration:create ./path-to-migration//use this to replace below scripts//typeorm = -d ./data-source",
+    "migration:create": "typeorm migration:create ./src/migrations/NoteRefactoring",
+    "migration:generate": "typeorm-ts-node-esm migration:generate ./src/migrations/NoteRefactoring -d ./src/config/data-source",
+    "migration:run": "typeorm-ts-node-esm migration:run -d ./src/config/data-source",
+    "migration:revert": "typeorm-ts-node-esm migration:revert -d ./src/config/data-source",
     "lint": "eslint . --ext .ts",
     "eslint:fix": "eslint --fix",
     "client": "npm run dev --prefix ../frontend",

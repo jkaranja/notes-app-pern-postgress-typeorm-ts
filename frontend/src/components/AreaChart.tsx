@@ -1,14 +1,39 @@
-
-import React, { useState } from "react";
 import { Line } from "react-chartjs-2";
-import UserData from "../Data";
+import { IChartProps } from "../types/chart";
+
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Filler,
+  Legend,
+} from "chart.js";
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Filler,
+  Legend
+);
+
+//docs
+//https://react-chartjs-2.js.org/examples/area-chart
+//https:www.chartjs.org/docs/4.2.1/charts/area.html
 
 const options = {
   responsive: true,
   plugins: {
     legend: {
       // display: false,
-      position: "bottom", //default is top
+      position: "bottom" as const, //have the compiler infer the most specific type it can
     },
     title: {
       display: false,
@@ -17,24 +42,24 @@ const options = {
   },
 };
 //area chart is just a line chart with the fill set to true in dataset
-function AreaChart({ chartData }: { [key: string]: number }) {
+function AreaChart({ chartData }: IChartProps) {
   //charts data
-  const [userData, setUserData] = useState({
-    labels: UserData.map((data) => data.year),
+  const data = {
+    labels: chartData.map((data) => data.year),
     datasets: [
       {
-        fill: true,
+        fill: true, //converts line chart to area chart
         label: "Users Gained",
-        data: UserData.map((data) => data.userGain),
+        data: chartData.map((data) => data.userGain),
         borderColor: "rgb(53, 162, 235)",
         backgroundColor: "rgba(53, 162, 235, 0.5)",
         // borderWidth: 2,
         pointBackgroundColor: "rgb(53, 162, 235)",
       },
     ],
-  });
-  //@ts-expect-error
-  return <Line data={userData} options={options} />;
+  };
+
+  return <Line data={data} options={options} />;
 }
 
 export default AreaChart;

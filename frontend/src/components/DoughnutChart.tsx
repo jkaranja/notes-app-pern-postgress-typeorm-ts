@@ -1,14 +1,19 @@
-import { Button } from "@mui/material";
-import React, { useState } from "react";
+
 import { Doughnut } from "react-chartjs-2";
-import UserData from "../Data";
+
+import { IChartProps } from "../types/chart";
+
+import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
+
+ChartJS.register(ArcElement, Tooltip, Legend);
+
 
 const options = {
   responsive: true,
   plugins: {
     legend: {
       // display: false,
-      position: "bottom", //default is top
+      position: "bottom" as const, //default is top
     },
     title: {
       display: false,
@@ -38,14 +43,14 @@ const textCenter = {
 };
 
 //can only rep one dataset//extra is ignored
-function DoughnutChart({ chartData }: { [key: string]: number }) {
+function DoughnutChart({ chartData }: IChartProps) {
   //charts data
-  const [userData, setUserData] = useState({
-    labels: UserData.map((data) => data.year),
+  const data = {
+    labels: chartData.map((data) => data.year),
     datasets: [
       {
         label: "Users Gained",
-        data: UserData.map((data) => data.userGain),
+        data: chartData.map((data) => data.userGain),
         backgroundColor: [
           "#4a148c",
           "#ce93d8",
@@ -59,9 +64,9 @@ function DoughnutChart({ chartData }: { [key: string]: number }) {
         // radius: "40%"//sets size of the donut, //default is 100%
       },
     ],
-  });
-  //@ts-ignore
-  return <Doughnut data={userData} options={options} plugins={[textCenter]} />;
+  };
+ 
+  return <Doughnut data={data} options={options} plugins={[textCenter]} />;
 }
 
 export default DoughnutChart;

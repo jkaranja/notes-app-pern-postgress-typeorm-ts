@@ -1,7 +1,23 @@
-import React, { useState } from "react";
 import { Bar } from "react-chartjs-2";
-import { Chart as ChartJS } from "chart.js/auto";
-import UserData from "../Data";
+import { IChartProps } from "../types/chart";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from "chart.js";
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 //can omit options
 const options = {
@@ -9,7 +25,7 @@ const options = {
   plugins: {
     legend: {
       // display: false,
-      position: "bottom", //default is top
+      position: "bottom" as const, //default is top
     },
     title: {
       display: true,
@@ -18,29 +34,29 @@ const options = {
   },
 };
 
-function BarChart({ chartData }: { [key: string]: number }) {
+function BarChart({ chartData }: IChartProps) {
   //charts data
-  const [userData, setUserData] = useState({
-    labels: UserData.map((data) => data.year),
+  const data = {
+    labels: chartData.map((data) => data.year),
     datasets: [
       {
         label: "User gained",
-        data: UserData.map((data) => data.userGain),
+        data: chartData.map((data) => data.userGain),
         backgroundColor: "rgba(255, 99, 132, 0.5)",
         // borderColor: "black",
         borderWidth: 1,
       },
       {
         label: "User Lost",
-        data: UserData.map((data) => data.userLost),
+        data: chartData.map((data) => data.userLost),
         backgroundColor: "rgba(53, 162, 235, 0.5)",
         // borderColor: "black",
         borderWidth: 1,
       },
     ],
-  });
-  //@ts-ignore
-  return <Bar data={userData} options={options} />;
+  };
+
+  return <Bar data={data} options={options} />;
 }
 
 export default BarChart;

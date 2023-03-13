@@ -38,7 +38,8 @@ import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 import Grid2 from "@mui/material/Unstable_Grid2/Grid2";
 import CircleIcon from "@mui/icons-material/Circle";
 import BarChartIcon from "@mui/icons-material/BarChart";
-import DashLayout from "../../components/DashLayout";
+
+import UserData from "../../Data";
 
 const Reports = () => {
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
@@ -50,7 +51,7 @@ const Reports = () => {
     setAnchorEl(null);
   };
 
-  const [chartData, setChartData] = useState([]);
+  const [chartData, setChartData] = useState(UserData);
 
   return (
     <Box>

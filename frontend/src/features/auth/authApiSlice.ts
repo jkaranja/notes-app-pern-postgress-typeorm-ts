@@ -72,7 +72,7 @@ const authApiSlice = apiSlice.injectEndpoints({
         (response.data as { message: string })?.message,
     }),
     //refresh token//persist on page reload or remember me
-    refresh: builder.mutation<{ accessToken: string }, void>({
+    refresh: builder.mutation<{ accessToken: string }, null>({
       query: () => ({
         url: "/auth/refresh",
         method: "GET",

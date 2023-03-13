@@ -1,14 +1,18 @@
-import React, { useState } from "react";
 import { Pie } from "react-chartjs-2";
 
-import UserData from "../Data";
+import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
+
+import { IChartProps } from "../types/chart";
+
+ChartJS.register(ArcElement, Tooltip, Legend);
+
 const options = {
   responsive: true,
   plugins: {
     legend: {
       // display: false,
-      
-      position: "bottom", //default is top
+
+      position: "bottom" as const, //default is top
     },
     title: {
       display: true,
@@ -17,14 +21,14 @@ const options = {
   },
 };
 //can only rep one dataset//extra is ignored
-function PieChart({ chartData }: {[key: string]:number}) {
+function PieChart({ chartData }: IChartProps) {
   //charts data
-  const [userData, setUserData] = useState({
-    labels: UserData.map((data) => data.year),
+  const data = {
+    labels: chartData.map((data) => data.year),
     datasets: [
       {
         label: "Users Gained",
-        data: UserData.map((data) => data.userGain),
+        data: chartData.map((data) => data.userGain),
         backgroundColor: [
           "#4a148c",
           "#ce93d8",
@@ -38,9 +42,9 @@ function PieChart({ chartData }: {[key: string]:number}) {
         // hoverBackgroundColor: "red",
       },
     ],
-  });
-  //@ts-ignore
-  return <Pie data={userData} options={options} />;
+  };
+
+  return <Pie data={data} options={options} />;
 }
 
 export default PieChart;
