@@ -23,8 +23,9 @@ import "./config/passport";
 const app = express();
 const PORT = process.env.PORT || 4000; //avoid 5000//used by other services eg linkedin passport
 
-//access routes only when conn to db is established
-const main = async () => {
+//access routes+ middleware only when conn to db is established
+//make it an IIF
+(async () => {
   try {
     // create express app
     //initialize connection to db
@@ -98,6 +99,6 @@ const main = async () => {
     console.error(error);
     //throw new Error("Unable to connect to db");
   }
-};
+})();
 
-main();
+
